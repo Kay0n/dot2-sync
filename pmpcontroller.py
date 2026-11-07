@@ -15,7 +15,7 @@ MAX_DEVICE_VALUE = 14896 # The device sends a max value of 14896
 
 class PMPEvent(Enum):
     """
-    Enum representing different Platform M+ event types.
+    Enum representing different Platform M+ event types
     """
     FADER = auto()
     BUTTON = auto()
@@ -23,15 +23,15 @@ class PMPEvent(Enum):
 
 class PMPController:
     """
-    A class to interact with the Icon Platform M+ MIDI control surface.
+    A class to interact with the Icon Platform M+ MIDI control surface
     """
 
     def __init__(self, sync_faders: bool = False):
         """
-        Initialize the Platform M+ Controller.
+        Initialize the Platform M+ Controller
 
         Args:
-            `sync_faders (bool, optional)`: Whether the fader positions should sync with user movement. Defaults to False.
+            `sync_faders (bool, optional)`: Whether the fader positions should sync with user movement. Defaults to False
         """
         self.connected = False
         self.sync_faders = sync_faders
@@ -47,13 +47,13 @@ class PMPController:
 
     def connect(self) -> Tuple[int, int]:
         """
-        Connect to the Platform M+ MIDI device.
+        Connect to the Platform M+ MIDI device
 
         Returns:
-            `in_port, out_port (Tuple[int, int])`: A tuple containing the input and output port numbers.
+            `in_port, out_port (Tuple[int, int])`: A tuple containing the input and output port numbers
 
         Raises:
-            `OSError`: If the Platform M+ device is not found.
+            `OSError`: If the Platform M+ device is not found
         """
         in_port = self.__find_port(self.midi_in)
         out_port = self.__find_port(self.midi_out)
@@ -107,11 +107,11 @@ class PMPController:
 
     def set_fader(self, fader_number: int, normalized_position: float):
         """
-        Set the position of a fader.
+        Set the position of a fader
 
         Args:
-            `fader_number (int)`: The number of the fader (0-8).
-            `normalized_position (float)`: The position of the fader, between 0 and 1.
+            `fader_number (int)`: The number of the fader (0-8)
+            `normalized_position (float)`: The position of the fader, between 0 and 1
         """
         if 0 <= fader_number < 9:
             value = int(normalized_position * MAX_DEVICE_VALUE)
@@ -126,11 +126,11 @@ class PMPController:
 
     def set_button(self, button_number: int, button_state: bool):
         """
-        Set the state of a button.
+        Set the state of a button
 
         Args:
-            `button_number (int)`: The number of the button.
-            `button_state (bool)`: The state to set the button to (True for on, False for off).
+            `button_number (int)`: The number of the button
+            `button_state (bool)`: The state to set the button to (True for on, False for off)
         """
         self.button_states[button_number] = button_state
         velocity = VELOCITY_ON if button_state else VELOCITY_OFF
@@ -142,34 +142,34 @@ class PMPController:
         
     def set_fader_sync(self, sync_faders: bool):
         """
-        Set whether faders should sync with user movement.
+        Set whether faders should sync with user movement
 
         Args:
-            `sync_faders (bool)`: True to enable syncing, False to disable.
+            `sync_faders (bool)`: True to enable syncing, False to disable
         """
         self.sync_faders = sync_faders
 
     def get_fader(self, fader_number: int) -> float:
         """
-        Get the current position of a fader.
+        Get the current position of a fader
 
         Args:
-            `fader_number (int)`: The number of the fader (0-8).
+            `fader_number (int)`: The number of the fader (0-8)
 
         Returns:
-            `fader_position (float)`: The current position of the fader, between 0 and 1.
+            `fader_position (float)`: The current position of the fader, between 0 and 1
         """
         return self.fader_positions[fader_number]
 
     def get_button(self, button_number: int) -> bool:
         """
-        Get the current state of a button.
+        Get the current state of a button
 
         Args:
-            `button_number (int)`: The number of the button.
+            `button_number (int)`: The number of the button
 
         Returns:
-            `button_state (bool)`: The current state of the button (True for on, False for off).
+            `button_state (bool)`: The current state of the button (True for on, False for off)
         """
         button_state = self.button_states.get(button_number, False)
         self.button_states[button_number] = button_state
@@ -178,7 +178,7 @@ class PMPController:
     # raises OSError
     def reset(self):
         """
-        Reset all faders to 0 and all buttons to off.
+        Reset all faders to 0 and all buttons to off
         """
         for i in range(0, 9):
             self.set_fader(i, 0)
@@ -187,11 +187,11 @@ class PMPController:
 
     def add_event_listener(self, event_type: PMPEvent, callback: Callable):
         """
-        Add an event listener for a specific event type.
+        Add an event listener for a specific event type
 
         Args:
-            `event_type (PMPEvent)`: The type of event to listen for.
-            `callback (Callable)`: The function to call when the event occurs.
+            `event_type (PMPEvent)`: The type of event to listen for
+            `callback (Callable)`: The function to call when the event occurs
 
         Callback Signatures:
             - Fader:    `callback(fader_number: int, normalized_value: float)`
@@ -202,17 +202,17 @@ class PMPController:
 
     def remove_event_listener(self, event_type: PMPEvent, callback: Callable):
         """
-        Remove an event listener for a specific event type.
+        Remove an event listener for a specific event type
 
         Args:
-            `event_type (PMPEvent)`: The type of event the listener was registered for.
-            `callback (Callable)`: The function to remove from the event listeners.
+            `event_type (PMPEvent)`: The type of event the listener was registered for
+            `callback (Callable)`: The function to remove from the event listeners
         """
         self.event_callbacks[event_type].remove(callback)
 
     def disconnect(self):
         """
-        Disconnect from the Platform M+ device and close MIDI ports.
+        Disconnect from the Platform M+ device and close MIDI ports
         """
         self.connected = False
         time.sleep(0.01)
