@@ -114,6 +114,7 @@ class PMPController:
             `normalized_position (float)`: The position of the fader, between 0 and 1
         """
         if 0 <= fader_number < 9:
+            normalized_position = min(max(normalized_position, 0.0), 1.0)
             value = int(normalized_position * MAX_DEVICE_VALUE)
             msb = (value >> 7) & MAX_7BIT
             lsb = value & MAX_7BIT
