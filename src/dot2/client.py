@@ -20,7 +20,7 @@ class Dot2Client:
     def __init__(self, host: str, password: str, groups: Iterable[ExecutorGroup] = (), *, timeout: float = 5.0):
         self.host = host
         self.executors: dict[int, Executor] = {}  # last known state, by executor number
-        self._password = password
+        self.password = password
         self._groups = list(groups)
         self._timeout = timeout
         self._listeners: list[Listener] = []
@@ -35,7 +35,7 @@ class Dot2Client:
 
     async def connect(self) -> None:
         """Connect and start watching executors. Raises Dot2Error on failure"""
-        self._connection = await Connection.open(self.host, self._password, self._timeout)
+        self._connection = await Connection.open(self.host, self.password, self._timeout)
         self._updates_task = asyncio.create_task(self._receive_updates())
         await self._request_playbacks()
 
@@ -85,9 +85,8 @@ class Dot2Client:
         return lambda: self._listeners.remove(listener)
 
     async def _receive_updates(self) -> None:
-        # The console answers each playbacks request once, so every answer
-        # triggers the next request. A re-login drops pending requests, so
-        # the chain is restarted after one too
+        # Each playbacks request is answered once, so each answer sends the next.
+        # A re-login drops pending requests, so it restarts the chain too
         try:
             async for message in self._connection.messages():
                 if protocol.is_playbacks(message):

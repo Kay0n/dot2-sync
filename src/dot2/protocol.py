@@ -1,7 +1,4 @@
-"""Message formats of the dot2 web remote. Pure functions, no I/O
-
-The session id is added by Connection.send, so it isn't part of these messages
-"""
+"""Message formats of the dot2 web remote. Connection.send adds the session id"""
 
 from typing import Any
 

@@ -1,0 +1,4 @@
+aiohttp
+python-rtmidi
+PySide6
+qasync

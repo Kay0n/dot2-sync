@@ -1,8 +1,4 @@
-"""A logged-in websocket session with a dot2 console
-
-Handles everything session-related (login, keep-alive, re-login) so that
-callers only see application messages
-"""
+"""A logged-in websocket session with a dot2 console, handling login, keep-alive and re-login"""
 
 from __future__ import annotations
 
