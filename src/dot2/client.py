@@ -79,8 +79,8 @@ class Dot2Client:
 
     # -- state updates -----------------------------------------------------
 
-    def add_listener(self, listener: Listener) -> Callable[[], None]:
-        """Call `listener` whenever an executor changes. Returns a function that removes it"""
+    def add_executor_listener(self, listener: Listener) -> Callable[[], None]:
+        """Returns a function that removes it"""
         self._listeners.append(listener)
         return lambda: self._listeners.remove(listener)
 

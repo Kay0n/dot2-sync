@@ -39,7 +39,7 @@ def main() -> int:
             asyncio.run(sync.run())
         return 0
 
-    autostart.update()
+    autostart.update_path()
     import tray  # only the tray needs Qt
 
     return tray.run(sync, config)

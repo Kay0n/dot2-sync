@@ -10,7 +10,7 @@ PITCH_BEND = 0xE0
 VELOCITY_ON = 127
 VELOCITY_OFF = 0
 MAX_7BIT = 0x7F
-MAX_DEVICE_VALUE = 14896  # the device's max, not the full 14 bits
+MAX_FADER_VALUE = 14896  # the device's max, not the full 14 bits
 FADER_COUNT = 9  # 8 channel faders and the master
 BUTTON_COUNT = 100  # note numbers cleared by reset()
 
@@ -24,14 +24,13 @@ class PMPEvent(Enum):
 class PMPController:
     """Event listeners are called on rtmidi's input thread"""
 
-    def __init__(self, sync_faders: bool = False):
-        """`sync_faders` drives the motors to follow the user's own fader moves"""
+    def __init__(self, motors_follow_moves: bool = False):
         self.connected = False
-        self.sync_faders = sync_faders
+        self.motors_follow_moves = motors_follow_moves
         self.midi_in = rtmidi.MidiIn()
         self.midi_out = rtmidi.MidiOut()
         self.fader_positions = [0.0] * FADER_COUNT
-        self.button_states: dict[int, bool] = {}
+        self.button_lights: dict[int, bool] = {}
         self.event_callbacks: dict[PMPEvent, list[Callable]] = {event: [] for event in PMPEvent}
 
     def connect(self) -> tuple[int, int]:
@@ -68,41 +67,40 @@ class PMPController:
         """Move fader 0-8 to a position from 0 to 1. Raises OSError if disconnected"""
         if 0 <= fader_number < FADER_COUNT:
             normalized_position = min(max(normalized_position, 0.0), 1.0)
-            value = int(normalized_position * MAX_DEVICE_VALUE)
+            value = int(normalized_position * MAX_FADER_VALUE)
             msb = (value >> 7) & MAX_7BIT
             lsb = value & MAX_7BIT
             self._send([PITCH_BEND + fader_number, lsb, msb])
             self.fader_positions[fader_number] = normalized_position
 
-    def set_button(self, button_number: int, button_state: bool):
+    def set_button_light(self, button_number: int, is_lit: bool):
         """Raises OSError if disconnected"""
-        self.button_states[button_number] = button_state
-        self._send([NOTE_ON, button_number, VELOCITY_ON if button_state else VELOCITY_OFF])
+        self.button_lights[button_number] = is_lit
+        self._send([NOTE_ON, button_number, VELOCITY_ON if is_lit else VELOCITY_OFF])
 
     def reset(self):
         """Move all faders to 0 and turn all buttons off. Raises OSError if disconnected"""
         for fader_number in range(FADER_COUNT):
             self.set_fader(fader_number, 0)
         for button_number in range(BUTTON_COUNT):
-            self.set_button(button_number, False)
+            self.set_button_light(button_number, False)
 
-    def set_fader_sync(self, sync_faders: bool):
-        self.sync_faders = sync_faders
+    def set_motors_follow_moves(self, motors_follow_moves: bool):
+        self.motors_follow_moves = motors_follow_moves
 
     def get_fader(self, fader_number: int) -> float:
         """The last position (0 to 1) fader 0-8 was set to"""
         return self.fader_positions[fader_number]
 
-    def get_button(self, button_number: int) -> bool:
-        """The last state the button was set to"""
-        return self.button_states.get(button_number, False)
+    def get_button_light(self, button_number: int) -> bool:
+        return self.button_lights.get(button_number, False)
 
     # -- input -----------------------------------------------------------------
 
     def add_event_listener(self, event_type: PMPEvent, callback: Callable):
         """Callback signatures:
             FADER:   callback(fader_number: int, normalized_value: float)
-            BUTTON:  callback(button_number: int, is_pressed: bool, button_state: bool)
+            BUTTON:  callback(button_number: int, is_pressed: bool, is_lit: bool)
             ENCODER: callback(encoder_number: int, value: int)
         """
         self.event_callbacks[event_type].append(callback)
@@ -123,16 +121,16 @@ class PMPController:
             self._handle_encoder(data1, data2)
 
     def _handle_fader(self, fader_number: int, value: int):
-        normalized_value = value / MAX_DEVICE_VALUE
-        if self.sync_faders:
+        normalized_value = value / MAX_FADER_VALUE
+        if self.motors_follow_moves:
             self.set_fader(fader_number, normalized_value)
         for callback in self.event_callbacks[PMPEvent.FADER]:
             callback(fader_number, normalized_value)
 
     def _handle_button(self, button_number: int, is_pressed: bool):
-        button_state = self.get_button(button_number)
+        is_lit = self.get_button_light(button_number)
         for callback in self.event_callbacks[PMPEvent.BUTTON]:
-            callback(button_number, is_pressed, button_state)
+            callback(button_number, is_pressed, is_lit)
 
     def _handle_encoder(self, encoder_number: int, value: int):
         for callback in self.event_callbacks[PMPEvent.ENCODER]:
