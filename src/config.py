@@ -4,11 +4,23 @@ import json
 import logging
 import os
 import sys
+import tomllib
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-APP_NAME = "dot2-sync"
-VERSION = "1.0.0"
+
+def _read_pyproject() -> dict:
+    """pyproject.toml, which the build bundles next to the exe"""
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).parent.parent))
+    with open(root / "pyproject.toml", "rb") as file:
+        return tomllib.load(file)
+
+
+_pyproject = _read_pyproject()
+APP_NAME: str = _pyproject["project"]["name"]
+VERSION: str = _pyproject["project"]["version"]
+DESCRIPTION: str = _pyproject["project"]["description"]
+DISPLAY_NAME: str = _pyproject["tool"]["dot2-sync"]["display-name"]
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +49,7 @@ class Config:
 
     @classmethod
     def load(cls) -> Config:
-        """Load the saved settings, or the defaults if there aren't any"""
+        """Load saved settings or defaults if empty"""
         try:
             data = json.loads(cls.path().read_text(encoding="utf-8"))
         except FileNotFoundError:

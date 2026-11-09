@@ -6,7 +6,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 import autostart
-from config import VERSION, Config, log_path
+from config import DESCRIPTION, DISPLAY_NAME, VERSION, Config, log_path
 from sync import Dot2PMPSync
 
 
@@ -25,12 +25,12 @@ def setup_logging():
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sync a dot2 console with an Icon Platform M+")
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("--no-tray", action="store_true", help="run in the console without the tray icon")
     args = parser.parse_args()
 
     setup_logging()
-    logging.getLogger(__name__).info("dot2 Sync %s starting", VERSION)
+    logging.getLogger(__name__).info("%s %s starting", DISPLAY_NAME, VERSION)
     config = Config.load()
     sync = Dot2PMPSync(config.dot2_host, config.dot2_password)
 

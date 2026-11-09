@@ -1,5 +1,8 @@
-# Builds dist\dot2-sync\ (run dot2-sync.exe inside it) and zips it to dist\dot2-sync.zip.
-# Run on Windows from the project folder, with dot2-sync closed so its files can be replaced
-python -m pip install -r requirements.txt pyinstaller
-python -m PyInstaller --noconfirm --onedir --windowed --name dot2-sync src\main.py
-Compress-Archive -Path dist\dot2-sync -DestinationPath dist\dot2-sync.zip -Force
+# Builds dist\<name>\ (run <name>.exe inside it) and zips it to dist\<name>.zip, <name> being the project name in pyproject.toml.
+# Run on Windows from the project folder, with the app closed so its files can be replaced
+$project = python -c "import json, tomllib; print(json.dumps(tomllib.load(open('pyproject.toml', 'rb'))['project']))" | ConvertFrom-Json
+$name = $project.name
+
+python -m pip install @($project.dependencies) pyinstaller
+python -m PyInstaller --noconfirm --onedir --windowed --name $name --add-data "pyproject.toml:." src\main.py
+Compress-Archive -Path "dist\$name" -DestinationPath "dist\$name.zip" -Force

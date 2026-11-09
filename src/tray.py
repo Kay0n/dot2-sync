@@ -24,12 +24,11 @@ from PySide6.QtWidgets import (
 )
 
 import autostart
-from config import APP_NAME, VERSION, Config, log_path
+from config import APP_NAME, DISPLAY_NAME, VERSION, Config, log_path
 from sync import DeviceStatus, Dot2PMPSync
 
 log = logging.getLogger(__name__)
 
-TITLE = "dot2 Sync"
 GREEN = QColor("#2ecc71")
 AMBER = QColor("#f39c12")
 RED = QColor("#e74c3c")
@@ -86,7 +85,7 @@ class StatusWindow(QWidget):
         super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.sync = sync
         self.config = config
-        self.setWindowTitle(TITLE)
+        self.setWindowTitle(DISPLAY_NAME)
         self.setFixedWidth(340)
 
         self.pmp_row = DeviceRow("Platform M+")
@@ -191,7 +190,7 @@ class StatusWindow(QWidget):
         try:
             self.config.save()
         except OSError as error:
-            QMessageBox.warning(self, TITLE, f"Could not save settings:\n{error}")
+            QMessageBox.warning(self, DISPLAY_NAME, f"Could not save settings:\n{error}")
         self.sync.update_dot2_settings(self.config.dot2_host, self.config.dot2_password)
         self.save_button.setEnabled(False)
 
@@ -199,7 +198,7 @@ class StatusWindow(QWidget):
         try:
             autostart.enable() if enabled else autostart.disable()
         except OSError as error:
-            QMessageBox.warning(self, TITLE, f"Could not change the start-up setting:\n{error}")
+            QMessageBox.warning(self, DISPLAY_NAME, f"Could not change the start-up setting:\n{error}")
         self.start_on_login.blockSignals(True)
         self.start_on_login.setChecked(autostart.is_enabled())
         self.start_on_login.blockSignals(False)
@@ -240,7 +239,7 @@ class Tray:
         color, text = overall_status(self.sync)
         icon = dot_icon(color)
         self.icon.setIcon(icon)
-        self.icon.setToolTip(f"{TITLE}: {text}")
+        self.icon.setToolTip(f"{DISPLAY_NAME}: {text}")
         self.window.setWindowIcon(icon)
         self.window.show_status()
 
@@ -288,7 +287,7 @@ def listen_for_new_instances(show: Callable[[], None]) -> QLocalServer:
 def run(sync: Dot2PMPSync, config: Config) -> int:
     """Run the tray app until the user quits. Returns the exit code"""
     app = QApplication(sys.argv)
-    app.setApplicationName(TITLE)
+    app.setApplicationName(DISPLAY_NAME)
     app.setQuitOnLastWindowClosed(False)
     if show_running_instance():
         log.info("Already running, showing that copy instead")

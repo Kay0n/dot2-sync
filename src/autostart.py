@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from config import APP_NAME
+from config import APP_NAME, DISPLAY_NAME
 
 
 def launch_command() -> str:
@@ -59,7 +59,7 @@ else:
         DESKTOP_FILE.write_text(
             "[Desktop Entry]\n"
             "Type=Application\n"
-            "Name=dot2 Sync\n"
+            f"Name={DISPLAY_NAME}\n"
             f"Exec={launch_command()}\n"
             "X-GNOME-Autostart-enabled=true\n",
             encoding="utf-8",
