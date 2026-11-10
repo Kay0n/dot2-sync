@@ -13,10 +13,12 @@ MAX_7BIT = 0x7F
 MAX_FADER_VALUE = 14896  # the device's max, not the full 14 bits
 FADER_COUNT = 9  # 8 channel faders and the master
 BUTTON_COUNT = 100  # note numbers cleared by reset()
+FADER_TOUCH_NOTE = 104  # fader 0's touch note, up to 112 for the master
 
 
 class PMPEvent(Enum):
     FADER = auto()
+    FADER_TOUCH = auto()
     BUTTON = auto()
     ENCODER = auto()
 
@@ -30,6 +32,7 @@ class PMPController:
         self.midi_in = rtmidi.MidiIn()
         self.midi_out = rtmidi.MidiOut()
         self.fader_positions = [0.0] * FADER_COUNT
+        self.faders_touched = [False] * FADER_COUNT
         self.button_lights: dict[int, bool] = {}
         self.event_callbacks: dict[PMPEvent, list[Callable]] = {event: [] for event in PMPEvent}
 
@@ -89,8 +92,11 @@ class PMPController:
         self.motors_follow_moves = motors_follow_moves
 
     def get_fader(self, fader_number: int) -> float:
-        """The last position (0 to 1) fader 0-8 was set to"""
+        """The last position (0 to 1) fader 0-8 was set or moved to"""
         return self.fader_positions[fader_number]
+
+    def is_fader_touched(self, fader_number: int) -> bool:
+        return self.faders_touched[fader_number]
 
     def get_button_light(self, button_number: int) -> bool:
         return self.button_lights.get(button_number, False)
@@ -100,6 +106,7 @@ class PMPController:
     def add_event_listener(self, event_type: PMPEvent, callback: Callable):
         """Callback signatures:
             FADER:   callback(fader_number: int, normalized_value: float)
+            FADER_TOUCH: callback(fader_number: int, is_touched: bool)
             BUTTON:  callback(button_number: int, is_pressed: bool, is_lit: bool)
             ENCODER: callback(encoder_number: int, value: int)
         """
@@ -115,6 +122,8 @@ class PMPController:
         status_byte, data1, data2 = midi_message
         if PITCH_BEND <= status_byte < PITCH_BEND + FADER_COUNT:
             self._handle_fader(status_byte - PITCH_BEND, (data2 << 7) | data1)
+        elif status_byte == NOTE_ON and FADER_TOUCH_NOTE <= data1 < FADER_TOUCH_NOTE + FADER_COUNT:
+            self._handle_fader_touch(data1 - FADER_TOUCH_NOTE, data2 > 0)
         elif status_byte == NOTE_ON:
             self._handle_button(data1, data2 > 0)
         elif status_byte == CONTROL_CHANGE:
@@ -122,10 +131,16 @@ class PMPController:
 
     def _handle_fader(self, fader_number: int, value: int):
         normalized_value = value / MAX_FADER_VALUE
+        self.fader_positions[fader_number] = min(max(normalized_value, 0.0), 1.0)
         if self.motors_follow_moves:
             self.set_fader(fader_number, normalized_value)
         for callback in self.event_callbacks[PMPEvent.FADER]:
             callback(fader_number, normalized_value)
+
+    def _handle_fader_touch(self, fader_number: int, is_touched: bool):
+        self.faders_touched[fader_number] = is_touched
+        for callback in self.event_callbacks[PMPEvent.FADER_TOUCH]:
+            callback(fader_number, is_touched)
 
     def _handle_button(self, button_number: int, is_pressed: bool):
         is_lit = self.get_button_light(button_number)

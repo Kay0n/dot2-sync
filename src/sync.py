@@ -49,6 +49,7 @@ class Dot2PMPSync:
         # sent one at a time so commands stay in order
         self._dot2_commands: asyncio.Queue[Callable[[], Awaitable[None]]] = asyncio.Queue()
         self._pending_fader_positions: dict[int, float] = {}  # by executor
+        self._touched_fader_executors: set[int] = set()  # their motors aren't driven by dot2
         self._loop: asyncio.AbstractEventLoop | None = None
         self._status_listeners: list[Callable[[], None]] = []
         self._retry_now = asyncio.Event()
@@ -58,6 +59,7 @@ class Dot2PMPSync:
 
         self.dot2.add_executor_listener(self._dot2_executor_changed)
         self.pmp.add_event_listener(PMPEvent.FADER, self._pmp_fader_changed)
+        self.pmp.add_event_listener(PMPEvent.FADER_TOUCH, self._pmp_fader_touched)
         self.pmp.add_event_listener(PMPEvent.BUTTON, self._pmp_button_changed)
 
     @property
@@ -101,7 +103,8 @@ class Dot2PMPSync:
         try:
             if executor.kind is ExecutorKind.FADER:
                 fader = DOT2_TO_PMP_FADER[executor.number]
-                self.pmp.set_fader(fader, executor.position)
+                if executor.number not in self._touched_fader_executors:
+                    self.pmp.set_fader(fader, executor.position)
                 self.pmp.set_button_light(fader + 8, executor.active)  # SOLO button lights green when fader > 0
             elif executor.number in DOT2_TO_PMP_BUTTON:
                 self.pmp.set_button_light(DOT2_TO_PMP_BUTTON[executor.number], executor.active)
@@ -130,6 +133,11 @@ class Dot2PMPSync:
             position = min(max(normalized_value, 0.0), 1.0)
             self._loop.call_soon_threadsafe(self._queue_fader_position, executor, position)
 
+    def _pmp_fader_touched(self, fader_number: int, is_touched: bool):
+        executor = PMP_TO_DOT2_FADER.get(fader_number)
+        if executor is not None and self._loop:
+            self._loop.call_soon_threadsafe(self._fader_touch_changed, executor, fader_number, is_touched)
+
     def _pmp_button_changed(self, button_number: int, is_pressed: bool, is_lit: bool):
         executor = PMP_TO_DOT2_BUTTON.get(button_number)
         if is_pressed and executor is not None:
@@ -145,6 +153,14 @@ class Dot2PMPSync:
         self._pending_fader_positions[executor] = position
         if not already_queued:
             self._dot2_commands.put_nowait(lambda: self._send_latest_fader_position(executor))
+
+    def _fader_touch_changed(self, executor: int, fader_number: int, is_touched: bool):
+        if is_touched:
+            self._touched_fader_executors.add(executor)
+            return
+        self._touched_fader_executors.discard(executor)
+        if self.syncing:  # dot2 may have moved it while touched, so the fader's final position wins
+            self._queue_fader_position(executor, self.pmp.get_fader(fader_number))
 
     async def _send_latest_fader_position(self, executor: int):
         if (position := self._pending_fader_positions.pop(executor, None)) is not None:
@@ -169,6 +185,7 @@ class Dot2PMPSync:
                 await self._wait_for_retry()
                 continue
 
+            self._touched_fader_executors.clear()  # touches from before were never released
             self._set_status(pmp=DeviceStatus(connected=True))
             while self.pmp.is_connected():
                 await asyncio.sleep(CONNECTION_CHECK_SECONDS)
