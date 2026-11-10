@@ -3,17 +3,19 @@
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 
+import status_lights
 from dot2 import AuthenticationError, Dot2Client, Dot2Error, Executor, ExecutorGroup, ExecutorKind
 from pmpcontroller import PMPController, PMPEvent
 
 log = logging.getLogger(__name__)
 
+StatusLights = Callable[[PMPController], Coroutine]  # a pattern from status_lights
+
 RETRY_SECONDS = 10
 CONNECTION_CHECK_SECONDS = 1
-SYNC_INDICATOR_BUTTON = 86  # blue light on the PMP while syncing
 
 # dot2 button executor -> PMP button. Both rows are mirrored: 108 is 24, 101 is 31
 DOT2_TO_PMP_BUTTON = {108 - i: 24 + i for i in range(8)} | {208 - i: 16 + i for i in range(8)}
@@ -51,6 +53,8 @@ class Dot2PMPSync:
         self._status_listeners: list[Callable[[], None]] = []
         self._retry_now = asyncio.Event()
         self._dot2_settings_changed = asyncio.Event()
+        self._status_lights: StatusLights | None = None
+        self._status_lights_task: asyncio.Task | None = None
 
         self.dot2.add_executor_listener(self._dot2_executor_changed)
         self.pmp.add_event_listener(PMPEvent.FADER, self._pmp_fader_changed)
@@ -82,6 +86,7 @@ class Dot2PMPSync:
                 tasks.create_task(self._keep_dot2_connected())
                 tasks.create_task(self._forward_to_dot2())
         finally:
+            self._show_status_lights(None)
             self._reset_pmp()
             self.pmp.disconnect()
             await self.dot2.close()
@@ -102,6 +107,15 @@ class Dot2PMPSync:
                 self.pmp.set_button_light(DOT2_TO_PMP_BUTTON[executor.number], executor.active)
         except OSError:
             pass  # an unplugged PMP is noticed by _keep_pmp_connected
+
+    def _show_status_lights(self, pattern: StatusLights | None):
+        """Switch to another light pattern, unless it's already showing"""
+        if pattern is self._status_lights:
+            return
+        if self._status_lights_task:
+            self._status_lights_task.cancel()
+        self._status_lights = pattern
+        self._status_lights_task = asyncio.create_task(pattern(self.pmp)) if pattern else None
 
     def _reset_pmp(self):
         if self.pmp.is_connected():
@@ -218,14 +232,19 @@ class Dot2PMPSync:
         log.info("Platform M+: %s | dot2: %s", self.pmp_status, self.dot2_status)
         if self.syncing and not was_syncing:
             log.info("Sync active")
-            with contextlib.suppress(OSError):
-                self.pmp.set_button_light(SYNC_INDICATOR_BUTTON, True)
             for executor in list(self.dot2.executors.values()):  # later changes arrive via _dot2_executor_changed
                 self._show_on_pmp(executor)
         elif was_syncing and not self.syncing:
             log.info("Sync stopped")
             self._pending_fader_positions.clear()
             self._reset_pmp()
+
+        if self.syncing:
+            self._show_status_lights(status_lights.sync_started)
+        elif self.pmp_status.connected:
+            self._show_status_lights(status_lights.waiting_for_dot2)
+        else:
+            self._show_status_lights(None)
 
         for listener in list(self._status_listeners):
             try:
