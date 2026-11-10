@@ -27,10 +27,16 @@ def setup_logging():
 def main() -> int:
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("--no-tray", action="store_true", help="run in the console without the tray icon")
+    parser.add_argument("--button-test", action="store_true", help="log Platform M+ buttons, faders and encoders, lighting buttons while held")
     args = parser.parse_args()
 
     setup_logging()
     logging.getLogger(__name__).info("%s %s starting", DISPLAY_NAME, VERSION)
+    if args.button_test:
+        import button_test
+
+        return button_test.run()
+
     config = Config.load()
     sync = Dot2PMPSync(config.dot2_host, config.dot2_password)
 
