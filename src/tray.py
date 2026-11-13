@@ -1,11 +1,12 @@
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import Callable
 
 import qasync
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QRectF, Qt, QUrl
+from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QFont, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication,
@@ -32,18 +33,56 @@ log = logging.getLogger(__name__)
 GREEN = QColor("#2ecc71")
 AMBER = QColor("#f39c12")
 RED = QColor("#e74c3c")
+ICON_STYLE = os.environ.get("DOT2_SYNC_ICON", "led")  # temporary, designs are "led" and "underline"
 
 
-def dot_icon(color: QColor) -> QIcon:
+def taskbar_is_dark() -> bool:
+    if sys.platform == "win32":
+        import winreg
+
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+                return winreg.QueryValueEx(key, "SystemUsesLightTheme")[0] == 0
+        except OSError:
+            return True  # default for win11
+    return QGuiApplication.styleHints().colorScheme() != Qt.ColorScheme.Light
+
+
+def tray_icon(status_color: QColor) -> QIcon:
+    """Faders with a status light"""
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(color)
-    painter.drawEllipse(4, 4, 56, 56)
+    glyph = QColor("white") if taskbar_is_dark() else QColor("black")
+    draw = _draw_underline_icon if ICON_STYLE == "underline" else _draw_led_icon
+    draw(painter, glyph, status_color)
     painter.end()
     return QIcon(pixmap)
+
+
+def _draw_led_icon(painter: QPainter, glyph: QColor, status_color: QColor):
+    for x, top, knob_y in ((12, 5, 40), (32, 5, 26), (52, 34, 46)):
+        _draw_fader(painter, glyph, x, top, 59, knob_y)
+    painter.setBrush(status_color)
+    painter.drawEllipse(QRectF(41, 1, 22, 22))
+
+
+def _draw_underline_icon(painter: QPainter, glyph: QColor, status_color: QColor):
+    for x, knob_y in ((12, 30), (32, 14), (52, 24)):
+        _draw_fader(painter, glyph, x, 4, 44, knob_y)
+    painter.setBrush(status_color)
+    painter.drawRoundedRect(QRectF(2, 52, 60, 10), 5, 5)
+
+
+def _draw_fader(painter: QPainter, color: QColor, x: int, top: int, bottom: int, knob_y: int):
+    line = QPen(color, 5)
+    line.setCapStyle(Qt.PenCapStyle.RoundCap)
+    painter.setPen(line)
+    painter.drawLine(x, top, x, bottom)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    painter.drawRoundedRect(QRectF(x - 8, knob_y - 5, 16, 10), 3, 3)
 
 
 def overall_status(sync: Dot2PMPSync) -> tuple[QColor, str]:
@@ -228,6 +267,7 @@ class Tray:
         self.icon.activated.connect(self._activated)
 
         sync.add_status_listener(self.show_status)
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self.show_status)  # redraw for a light or dark taskbar
         self.show_status()
         self.icon.show()
         # At Windows login the tray may not exist yet; Qt adds the icon once it does
@@ -237,7 +277,7 @@ class Tray:
 
     def show_status(self):
         color, text = overall_status(self.sync)
-        icon = dot_icon(color)
+        icon = tray_icon(color)
         self.icon.setIcon(icon)
         self.icon.setToolTip(f"{DISPLAY_NAME}: {text}")
         self.window.setWindowIcon(icon)
