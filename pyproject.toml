@@ -2,7 +2,7 @@
 name = "dot2-sync"
 version = "1.0.0"
 description = "Sync a dot2 console with an Icon Platform M+"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "aiohttp",
     "python-rtmidi",
