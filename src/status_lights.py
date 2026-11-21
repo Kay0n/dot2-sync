@@ -5,8 +5,8 @@ import contextlib
 
 from pmpcontroller import PMPController
 
-WAITING_BUTTON = 0  # red. TODO: the button on the side, found with --button-test
-SYNC_INDICATOR_BUTTON = 86  # blue
+WAITING_BUTTON = 95  # red record button
+SYNC_INDICATOR_BUTTON = 86  # blue back button
 WAITING_FLASH_SECONDS = 0.5
 FLASH_SECONDS = 0.15
 
