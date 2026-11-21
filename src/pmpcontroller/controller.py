@@ -1,7 +1,24 @@
+import importlib.util
+import os
+import sys
 from collections.abc import Callable
 from enum import Enum, auto
 
-import rtmidi
+def _add_msvc_runtime_to_dll_path():
+    """python-rtmidi's Windows wheel needs msvcp140.dll, which only comes with the VC++ redistributable.
+    PySide6 ships a copy in shiboken6, so load it from there when the system doesn't have one"""
+    spec = importlib.util.find_spec("shiboken6")
+    if spec and spec.submodule_search_locations:
+        for folder in spec.submodule_search_locations:
+            if os.path.exists(os.path.join(folder, "msvcp140.dll")):
+                os.add_dll_directory(folder)
+                return
+
+
+if sys.platform == "win32":
+    _add_msvc_runtime_to_dll_path()
+
+import rtmidi  # noqa: E402
 
 PORT_NAME = "Platform M+"
 NOTE_ON = 0x90
