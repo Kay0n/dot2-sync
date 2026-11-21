@@ -5,7 +5,6 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-import autostart
 from config import DESCRIPTION, DISPLAY_NAME, VERSION, Config, log_path
 from sync import Dot2PMPSync
 
@@ -45,7 +44,6 @@ def main() -> int:
             asyncio.run(sync.run())
         return 0
 
-    autostart.update_path()
     import tray  # only the tray needs Qt
 
     return tray.run(sync, config)

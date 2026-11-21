@@ -1,15 +1,15 @@
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import Callable
 
 import qasync
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QRectF, Qt, QUrl
+from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QFont, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import autostart
 from config import APP_NAME, DISPLAY_NAME, VERSION, Config, log_path
 from sync import DeviceStatus, Dot2PMPSync
 
@@ -32,18 +31,56 @@ log = logging.getLogger(__name__)
 GREEN = QColor("#2ecc71")
 AMBER = QColor("#f39c12")
 RED = QColor("#e74c3c")
+ICON_STYLE = os.environ.get("DOT2_SYNC_ICON", "led")  # temporary, designs are "led" and "underline"
 
 
-def dot_icon(color: QColor) -> QIcon:
+def taskbar_is_dark() -> bool:
+    if sys.platform == "win32":
+        import winreg
+
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+                return winreg.QueryValueEx(key, "SystemUsesLightTheme")[0] == 0
+        except OSError:
+            return True  # default for win11
+    return QGuiApplication.styleHints().colorScheme() != Qt.ColorScheme.Light
+
+
+def tray_icon(status_color: QColor) -> QIcon:
+    """Faders with a status light"""
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(color)
-    painter.drawEllipse(4, 4, 56, 56)
+    glyph = QColor("white") if taskbar_is_dark() else QColor("black")
+    draw = _draw_underline_icon if ICON_STYLE == "underline" else _draw_led_icon
+    draw(painter, glyph, status_color)
     painter.end()
     return QIcon(pixmap)
+
+
+def _draw_led_icon(painter: QPainter, glyph: QColor, status_color: QColor):
+    for x, top, knob_y in ((12, 5, 40), (32, 5, 26), (52, 34, 46)):
+        _draw_fader(painter, glyph, x, top, 59, knob_y)
+    painter.setBrush(status_color)
+    painter.drawEllipse(QRectF(41, 1, 22, 22))
+
+
+def _draw_underline_icon(painter: QPainter, glyph: QColor, status_color: QColor):
+    for x, knob_y in ((12, 30), (32, 14), (52, 24)):
+        _draw_fader(painter, glyph, x, 4, 44, knob_y)
+    painter.setBrush(status_color)
+    painter.drawRoundedRect(QRectF(2, 52, 60, 10), 5, 5)
+
+
+def _draw_fader(painter: QPainter, color: QColor, x: int, top: int, bottom: int, knob_y: int):
+    line = QPen(color, 5)
+    line.setCapStyle(Qt.PenCapStyle.RoundCap)
+    painter.setPen(line)
+    painter.drawLine(x, top, x, bottom)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    painter.drawRoundedRect(QRectF(x - 8, knob_y - 5, 16, 10), 3, 3)
 
 
 def overall_status(sync: Dot2PMPSync) -> tuple[QColor, str]:
@@ -108,10 +145,6 @@ class StatusWindow(QWidget):
         self.password_input.returnPressed.connect(self._save_settings)
         self.save_button.clicked.connect(self._save_settings)
 
-        self.start_on_login = QCheckBox("Start with Windows" if sys.platform == "win32" else "Start on login")
-        self.start_on_login.setChecked(autostart.is_enabled())
-        self.start_on_login.toggled.connect(self._set_autostart)
-
         open_log = QPushButton("Open log")
         open_log.setFlat(True)
         open_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(log_path()))))
@@ -125,7 +158,6 @@ class StatusWindow(QWidget):
         settings.addRow("dot2 IP", self.host_input)
         settings.addRow("Password", self.password_input)
         save_row = QHBoxLayout()
-        save_row.addWidget(self.start_on_login)
         save_row.addStretch()
         save_row.addWidget(self.save_button)
 
@@ -194,15 +226,6 @@ class StatusWindow(QWidget):
         self.sync.update_dot2_settings(self.config.dot2_host, self.config.dot2_password)
         self.save_button.setEnabled(False)
 
-    def _set_autostart(self, enabled: bool):
-        try:
-            autostart.enable() if enabled else autostart.disable()
-        except OSError as error:
-            QMessageBox.warning(self, DISPLAY_NAME, f"Could not change the start-up setting:\n{error}")
-        self.start_on_login.blockSignals(True)
-        self.start_on_login.setChecked(autostart.is_enabled())
-        self.start_on_login.blockSignals(False)
-
 
 def separator() -> QFrame:
     line = QFrame()
@@ -228,6 +251,7 @@ class Tray:
         self.icon.activated.connect(self._activated)
 
         sync.add_status_listener(self.show_status)
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self.show_status)  # redraw for a light or dark taskbar
         self.show_status()
         self.icon.show()
         # At Windows login the tray may not exist yet; Qt adds the icon once it does
@@ -237,7 +261,7 @@ class Tray:
 
     def show_status(self):
         color, text = overall_status(self.sync)
-        icon = dot_icon(color)
+        icon = tray_icon(color)
         self.icon.setIcon(icon)
         self.icon.setToolTip(f"{DISPLAY_NAME}: {text}")
         self.window.setWindowIcon(icon)
