@@ -87,6 +87,9 @@ class Dot2PMPSync:
                 tasks.create_task(self._keep_pmp_connected())
                 tasks.create_task(self._keep_dot2_connected())
                 tasks.create_task(self._forward_to_dot2())
+        except Exception:
+            log.exception("Sync failed")  
+            raise
         finally:
             self._show_status_lights(None)
             self._reset_pmp()

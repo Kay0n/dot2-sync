@@ -1,3 +1,4 @@
+import ctypes
 import importlib.util
 import os
 import sys
@@ -46,8 +47,7 @@ class PMPController:
     def __init__(self, motors_follow_moves: bool = False):
         self.connected = False
         self.motors_follow_moves = motors_follow_moves
-        self.midi_in = rtmidi.MidiIn()
-        self.midi_out = rtmidi.MidiOut()
+        self._new_ports()
         self.fader_positions = [0.0] * FADER_COUNT
         self.faders_touched = [False] * FADER_COUNT
         self.button_lights: dict[int, bool] = {}
@@ -72,6 +72,14 @@ class PMPController:
     def disconnect(self):
         self.connected = False
         self.midi_in.cancel_callback()
+        if sys.platform == "win32" and self._find_port(self.midi_in) is None:
+            # Closing a WinMM port after its device was unplugged corrupts the heap and kills the process,
+            # so abandon these ports and make new ones for the next connect
+            if self.midi_in.is_port_open() or self.midi_out.is_port_open():
+                _keep_alive_forever(self.midi_in)
+                _keep_alive_forever(self.midi_out)
+                self._new_ports()
+            return
         self.midi_in.close_port()
         self.midi_out.close_port()
 
@@ -80,6 +88,10 @@ class PMPController:
         if self.connected and self._find_port(self.midi_in) is None:
             self.connected = False
         return self.connected
+
+    def _new_ports(self):
+        self.midi_in = rtmidi.MidiIn()
+        self.midi_out = rtmidi.MidiOut()
 
     # -- output ----------------------------------------------------------------
 
@@ -179,7 +191,16 @@ class PMPController:
 
     @staticmethod
     def _find_port(midi: rtmidi.MidiIn | rtmidi.MidiOut) -> int | None:
-        for index, port in enumerate(midi.get_ports()):
+        try:
+            ports = midi.get_ports()
+        except rtmidi.RtMidiError:  
+            return None
+        for index, port in enumerate(ports):
             if PORT_NAME in port:
                 return index
         return None
+
+
+def _keep_alive_forever(port: rtmidi.MidiIn | rtmidi.MidiOut):
+    """Leak a port so its destructor, which closes it, never runs, not even at exit"""
+    ctypes.pythonapi.Py_IncRef(ctypes.py_object(port))
