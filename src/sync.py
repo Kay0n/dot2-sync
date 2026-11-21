@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 StatusLights = Callable[[PMPController], Coroutine]  # a pattern from status_lights
 
-RETRY_SECONDS = 10
+RETRY_SECONDS = 2
 CONNECTION_CHECK_SECONDS = 1
 
 # dot2 button executor -> PMP button. Both rows are mirrored: 108 is 24, 101 is 31
