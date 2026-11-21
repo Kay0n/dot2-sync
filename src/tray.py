@@ -10,7 +10,6 @@ from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QFont, QGu
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -24,7 +23,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import autostart
 from config import APP_NAME, DISPLAY_NAME, VERSION, Config, log_path
 from sync import DeviceStatus, Dot2PMPSync
 
@@ -147,10 +145,6 @@ class StatusWindow(QWidget):
         self.password_input.returnPressed.connect(self._save_settings)
         self.save_button.clicked.connect(self._save_settings)
 
-        self.start_on_login = QCheckBox("Start with Windows" if sys.platform == "win32" else "Start on login")
-        self.start_on_login.setChecked(autostart.is_enabled())
-        self.start_on_login.toggled.connect(self._set_autostart)
-
         open_log = QPushButton("Open log")
         open_log.setFlat(True)
         open_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(log_path()))))
@@ -164,7 +158,6 @@ class StatusWindow(QWidget):
         settings.addRow("dot2 IP", self.host_input)
         settings.addRow("Password", self.password_input)
         save_row = QHBoxLayout()
-        save_row.addWidget(self.start_on_login)
         save_row.addStretch()
         save_row.addWidget(self.save_button)
 
@@ -232,15 +225,6 @@ class StatusWindow(QWidget):
             QMessageBox.warning(self, DISPLAY_NAME, f"Could not save settings:\n{error}")
         self.sync.update_dot2_settings(self.config.dot2_host, self.config.dot2_password)
         self.save_button.setEnabled(False)
-
-    def _set_autostart(self, enabled: bool):
-        try:
-            autostart.enable() if enabled else autostart.disable()
-        except OSError as error:
-            QMessageBox.warning(self, DISPLAY_NAME, f"Could not change the start-up setting:\n{error}")
-        self.start_on_login.blockSignals(True)
-        self.start_on_login.setChecked(autostart.is_enabled())
-        self.start_on_login.blockSignals(False)
 
 
 def separator() -> QFrame:
